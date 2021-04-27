@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+	<title>Maze Generator!</title>
+	<script>
+
+var mazeWidth = 150, mazeHeight = 75;
+var cellWidth = 5, cellHeight = 5;
+var hMargin = 30, vMargin = 20;
+var newBranchChance = 0.1;
+var drawInterval = 50;
+var blackground = true;
+
+var UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3;
+
+function randInRange(max) {
+	return Math.floor(Math.random() * max);
+}
+
+function getRandom(arr) {
+	if(arr.length == 0) return false;
+	return arr[randInRange(arr.length)];
+}
+
+var Grid = [];
+var canvas, ctx;
+var drawCounter = 0;
+
+var activeCells; //List of iterable cells (visited by generator but not confirmed blocked off)
+
+Grid.build = function(width, height) {
+	for(var y = 0; y < height; y++) {
+		var newRow = [];
+		for(var x = 0; x < width; x++) {
+			newRow.push(new Cell(x, y));
+		}
+		this.push(newRow);
+	}
+}
+
+var Cell = function(x, y) {
+	this.x = x;
+	this.y = y;
+	this.visited = false;
+	this.solution = false;
+	this.deadEnd = false;
+	this.walls = [true, true, true, true];
+	this._getNeighborsByFunction = function(f) {
+		selected = [];
+		for(var dir = 0; dir < 4; dir++) {
+			var n = this.getNeighbor(dir);
+			if(!(typeof n == 'undefined' || f(n, dir, this))) {
+				selected.push(dir);
+			}
+		}
+		return selected;
+	}
+	this.getNeighbor = function(dir) {
+		if(dir & 2) {
+			return Grid[this.y][this.x + (dir & 1 ? 1 : -1)];
+		} else {
+			var row = Grid[this.y + (dir & 1 ? 1 : -1)];
+			if(!row) return undefined;
+			return row[this.x];
+		}
+	}
+	this.getUnvisitedNeighbors=function() {
+		return this._getNeighborsByFunction(function(c) {return c.visited;});
+	}
+	this.getNeighborsToSoution=function() {
+		return this._getNeighborsByFunction(function(c, d, t) {return c.deadEnd || t.walls[d];});
+	}
+}
+
+function checkDrawCounter(f) {
+	if(drawCounter >= drawInterval) {
+		window.requestAnimationFrame(f);
+		drawCounter = 0;
+	} else {
+		drawCounter++;
+		f();
+	}
+}
+
+function generateMaze(newBranch) {
+	newBranch = typeof newBranch == 'undefined' ? Math.random() < newBranchChance : newBranch;
+	var c = newBranch ? getRandom(activeCells) : activeCells[activeCells.length - 1];
+	var newPaths = c.getUnvisitedNeighbors(Math.random() < newBranchChance ? getRandom(activeCells) : activeCells[activeCells.length - 1]);
+	var nextBranch;
+	if(newPaths.length <= 0) {
+		activeCells.splice(activeCells.indexOf(c), 1);
+		nextBranch = newBranch;
+	} else {
+		branchDir = getRandom(newPaths);
+		c.walls[branchDir] = false;
+		var branchCell = c.getNeighbor(branchDir);
+		branchCell.walls[branchDir ^ 1] = false;
+		branchCell.visited = true;
+		activeCells.push(branchCell);
+		drawCell(branchCell);
+	}
+	if(!activeCells.length <= 0) {
+		checkDrawCounter(function() {generateMaze(nextBranch)});
+	} else {
+		prepareExits();
+		activeCells = [Grid[0][0]];
+		window.requestAnimationFrame(solveMaze);
+	}
+	drawCell(c);
+}
+
+function solveMaze() {
+	var c = activeCells[activeCells.length - 1];
+	c.solution = true;
+	if(!(c.x == mazeWidth - 1 && c.y == mazeHeight - 1)) {
+		var directions = c.getNeighborsToSoution();
+		if(directions.length < 2 && activeCells.length > 1) {
+			c.solution = false;
+			c.deadEnd = true;
+			activeCells.pop();
+		} else {
+			var d = 0;		
+			while(c.getNeighbor(directions[d]).solution) d++;
+			activeCells.push(c.getNeighbor(directions[d]));
+		}
+		checkDrawCounter(solveMaze);
+	}
+	drawCell(c);
+}
+
+function drawCell(c) {
+	ctx.strokeStyle = '#000000';
+	ctx.lineWidth = 1;
+	var left = 1 + c.x * cellWidth;
+	var right = 1 + (c.x + 1) * cellWidth;
+	var up = 1 + c.y * cellHeight;
+	var down = 1 + (c.y + 1) * cellHeight;
+	ctx.clearRect(left, up, cellWidth, cellHeight);
+	ctx.beginPath();
+	if(activeCells.indexOf(c) != -1) {
+		ctx.fillStyle = '#ffaaaa';
+		ctx.fillRect(left, up, cellWidth, cellHeight);
+	}
+	ctx.moveTo(left, up);
+	c.walls[UP] ? ctx.lineTo(right, up) : ctx.moveTo(right, up);
+	c.walls[RIGHT] ? ctx.lineTo(right, down) : ctx.moveTo(right, down);
+	c.walls[DOWN] ? ctx.lineTo(left, down) : ctx.moveTo(left, down);
+	c.walls[LEFT] ? ctx.lineTo(left, up) : ctx.moveTo(left, up);
+	ctx.stroke();
+}
+
+function prepareExits() {
+	Grid[0][0].walls[UP] = false;
+	Grid[mazeHeight - 1][mazeWidth - 1].walls[DOWN] = false;
+	ctx.clearRect(2, 0, cellWidth - 1, 2);
+	ctx.clearRect(canvas.width - cellWidth, canvas.height - 2, cellWidth - 2, 2);
+}
+
+window.onload = function() {
+	mazeWidth = Math.floor((window.innerWidth - hMargin) / cellWidth);
+	mazeHeight = Math.floor((window.innerHeight - vMargin) / cellHeight);
+	canvas = document.getElementsByTagName('canvas')[0];
+	ctx = canvas.getContext('2d');
+	canvas.width = mazeWidth * cellWidth + 2;
+	canvas.height = mazeHeight * cellHeight + 2;
+	Grid.build(mazeWidth, mazeHeight);
+	if(blackground) ctx.fillRect(0, 0, canvas.width, canvas.height);
+	var firstCell = Grid[randInRange(mazeHeight)][randInRange(mazeWidth)];
+	firstCell.visited = true;
+	activeCells = [firstCell];
+	generateMaze();
+}
+
+	</script>
+	<style>
+
+canvas {
+	position:absolute;
+	margin:auto;
+	top:0;
+	bottom:0;
+	left:0;
+	right:0;
+}
+
+	</style>
+</head>
+<body>
+	<canvas></canvas>
+</body>
+</html>
