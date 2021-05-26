@@ -6,7 +6,7 @@
 	<script>
 
 var mazeWidth = 150, mazeHeight = 75;
-var cellWidth = 5, cellHeight = 5;
+var cellWidth = 10, cellHeight = 10;
 var hMargin = 30, vMargin = 20;
 var newBranchChance = 0.1;
 var drawInterval = 50;
@@ -65,10 +65,10 @@ var Cell = function(x, y) {
 			return row[this.x];
 		}
 	}
-	this.getUnvisitedNeighbors=function() {
+	this.getUnvisitedNeighbors = function() {
 		return this._getNeighborsByFunction(function(c) {return c.visited;});
 	}
-	this.getNeighborsToSoution=function() {
+	this.getNeighborsToSoution = function() {
 		return this._getNeighborsByFunction(function(c, d, t) {return c.deadEnd || t.walls[d];});
 	}
 }
